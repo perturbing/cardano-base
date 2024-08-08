@@ -44,7 +44,7 @@ module Cardano.Crypto.EllipticCurve.BLS12_381.Internal
   , Point1
   , Point2
   , PT
-  , Scalar
+  , Scalar (..)
   , Fr (..)
 
   , unsafePointFromPointPtr

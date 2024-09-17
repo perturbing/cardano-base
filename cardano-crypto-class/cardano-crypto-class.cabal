@@ -104,6 +104,7 @@ library
     , heapwords
     , io-classes >= 1.4.1
     , memory
+    , mempack
     , mtl
     , nothunks
     , primitive

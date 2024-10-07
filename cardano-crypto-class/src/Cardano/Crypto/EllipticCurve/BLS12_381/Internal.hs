@@ -202,6 +202,8 @@ type Point2Ptr = PointPtr Curve2
 
 newtype AffinePtr curve = AffinePtr (Ptr Void)
 
+type role Affine nominal
+
 type Affine1Ptr = AffinePtr Curve1
 type Affine2Ptr = AffinePtr Curve2
 

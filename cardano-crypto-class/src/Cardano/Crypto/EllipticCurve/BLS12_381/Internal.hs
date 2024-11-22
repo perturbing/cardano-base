@@ -177,8 +177,6 @@ import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
 import Foreign.Storable (peek)
 import System.IO.Unsafe (unsafePerformIO)
--- import Control.Monad (forM_)
--- import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 
 ---- Phantom Types
 

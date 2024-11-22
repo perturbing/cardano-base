@@ -949,7 +949,7 @@ blsMSM ps ss
                 affineListPtr
                 (fromIntegral numPoints)
                 scalarListPtr
-                (fromIntegral numPoints)
+                (c_size_blst_scalar * 8)
                 (ScratchPtr scratchPtr)
 
               -- Return the result as Right

@@ -965,43 +965,6 @@ blsMSM psAndSs =
               255
               (ScratchPtr scratchPtr)
 
--- blsMSM :: forall curve. BLS curve => [Point curve] -> [Scalar] -> Either BLSTError (Point curve)
--- blsMSM ps ss
---   | null ps || null ss = Left BLST_UNKNOWN_ERROR
---   | length ps /= length ss = Left BLST_UNKNOWN_ERROR
---   | otherwise = unsafePerformIO $ do
---       -- Convert points to affine representations
---       let affinePoints = map toAffine ps
-
---       -- Allocate memory for affine points and scalars
---       withAffineList affinePoints $ \affineListPtr ->
---         withScalarList ss $ \scalarListPtr -> do
-
---           -- Calculate required scratch size
---           let numPoints = length ps
---               scratchSize = c_blst_scratch_sizeof (Proxy @curve) (fromIntegral numPoints)
---               affineSize = sizeAffine (Proxy @curve)
-
-
---           -- Allocate scratch space
---           allocaBytes (fromIntegral scratchSize * affineSize) $ \scratchPtr -> do
-
---             -- Allocate memory for the result point
---             withNewPoint' $ \resultPtr -> do
---               -- Perform the MSM
---               c_blst_mult_pippenger
---                 resultPtr
---                 affineListPtr
---                 (fromIntegral numPoints)
---                 scalarListPtr
---                 255
---                 (ScratchPtr scratchPtr)
-
---               -- Return the result as Right
---               return $ unsafePointFromPointPtr resultPtr
---         >>= \case
---           p -> return $ Right p
-
 ---- PT operations
 
 ptMult :: PT -> PT -> PT

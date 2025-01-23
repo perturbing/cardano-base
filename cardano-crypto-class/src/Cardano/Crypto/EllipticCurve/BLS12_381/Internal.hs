@@ -939,7 +939,7 @@ blsMSM psAndSs =
     let (points, scalarsAsInt) = NonEmpty.unzip psAndSs
         numPoints = length points
         nonEmptyAffinePoints = fmap toAffine points
-        nonEmptyScalars = NonEmpty.fromList $ map (unsafePerformIO . scalarFromInteger) scalarsAsInt
+    nonEmptyScalars <- mapM scalarFromInteger scalarsAsInt
 
     withAffineVector nonEmptyAffinePoints $ \affineVectorPtr -> do
         withScalarVector nonEmptyScalars $ \scalarVectorPtr -> do

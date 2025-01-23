@@ -938,7 +938,7 @@ blsMSM psAndSs =
   unsafePerformIO $ do
     let (points, scalarsAsInt) = NonEmpty.unzip psAndSs
         numPoints = length points
-        nonEmptyAffinePoints = NonEmpty.fromList $ fmap toAffine points
+        nonEmptyAffinePoints = fmap toAffine points
         nonEmptyScalars = NonEmpty.fromList $ map (unsafePerformIO . scalarFromInteger) scalarsAsInt
 
     withAffineVector nonEmptyAffinePoints $ \affineVectorPtr -> do

@@ -463,8 +463,7 @@ withScalarVector :: NonEmpty.NonEmpty Scalar -> (ScalarPtrVector -> IO a) -> IO 
 withScalarVector scalars go = do
   let numScalars = NonEmpty.length scalars
   let sizeReference = sizeOf (undefined :: Ptr ())
-  p <- mallocForeignPtrBytes (numScalars * sizeReference)
-  withForeignPtr p $ \ptr -> do
+  allocaBytes (numScalars * sizeReference) $ \ptr -> do
     let copyPtrAtIx ix scalar =
           withScalar scalar $ \(ScalarPtr sPtr) -> do
           poke (ptr `advancePtr` ix) sPtr

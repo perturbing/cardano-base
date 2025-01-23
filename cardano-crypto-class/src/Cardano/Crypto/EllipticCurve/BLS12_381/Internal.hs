@@ -303,8 +303,7 @@ withAffineVector :: NonEmpty.NonEmpty (Affine curve) -> (AffinePtrVector curve -
 withAffineVector affines go = do
   let numAffines = NonEmpty.length affines
   let sizeReference = sizeOf (undefined :: Ptr ())
-  p <- mallocForeignPtrBytes (numAffines * sizeReference)
-  withForeignPtr p $ \ptr -> do
+  allocaBytes (numAffines * sizeReference) $ \ptr -> do
     let copyPtrAtIx ix affine =
           withAffine affine $ \(AffinePtr aPtr) -> do
           poke (ptr `advancePtr` ix) aPtr

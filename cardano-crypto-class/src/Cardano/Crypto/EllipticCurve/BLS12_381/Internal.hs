@@ -936,7 +936,7 @@ scalarCanonical scalar =
 blsMSM :: forall curve. BLS curve => NonEmpty.NonEmpty (Point curve, Integer) -> Point curve
 blsMSM psAndSs =
   unsafePerformIO $ do
-    let (points, scalarsAsInt) = unzip $ NonEmpty.toList psAndSs
+    let (points, scalarsAsInt) = NonEmpty.unzip psAndSs
         numPoints = length points
         nonEmptyAffinePoints = NonEmpty.fromList $ fmap toAffine points
         nonEmptyScalars = NonEmpty.fromList $ map (unsafePerformIO . scalarFromInteger) scalarsAsInt

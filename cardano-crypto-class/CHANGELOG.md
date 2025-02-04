@@ -1,9 +1,10 @@
 # Changelog for `cardano-crypto-class`
 
-## 2.2.0.0
+## 2.2.1.0
 
-**DO NOT RELEASE YET** - MemLocking and secure forgettin interface has not yet
-solidified. Ask @lehins if backport is needed.
+* Add `NoThunks` constraint on `UnsoundPureSignKeyKES` that was missed during KES changes
+
+## 2.2.0.0
 
 * Add required `HashAlgorithm` constraint to `Hash` serialization.
 * Add `MemPack` instance for `Hash` and `PackedBytes`

@@ -10,10 +10,8 @@ repository cardano-haskell-packages
     d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
 
 -- The hackage index-state
-index-state: 2024-10-10T00:52:24Z
--- The CHaP index-state
-index-state: cardano-haskell-packages 2024-10-10T04:22:19Z
-
+index-state: 2025-01-19T19:57:14Z
+index-state: cardano-haskell-packages 2025-01-13T22:30:16Z
 packages:
   base-deriving-via
   cardano-binary
@@ -24,14 +22,12 @@ packages:
   cardano-git-rev
   cardano-slotting
   cardano-strict-containers
-  cardano-mempool
   heapwords
   measures
   orphans-deriving-via
 
 -- Ensures colourized output from test runners
 test-show-details: direct
-
 tests: true
 benchmarks: true
 
@@ -42,3 +38,14 @@ program-options
 package bitvec
   -- Workaround for windows cross-compilation
   flags: -simd
+
+if impl(ghc >=9.12)
+  allow-newer:
+    -- treediff: Difficult maintainer https://github.com/haskellari/tree-diff/issues/97
+    -- cborg/serialise: Stuck on `cabal-3.14` and unresponsive maintainers https://github.com/well-typed/cborg/pull/339
+    , cborg:base
+    , cborg:ghc-prim
+    , serialise:base
+    , serialise:ghc-prim
+    , tree-diff:base
+    , tree-diff:time

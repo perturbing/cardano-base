@@ -953,6 +953,19 @@ scalarCanonical scalar =
 
 ---- MSM operations
 
+-- | A small convenience helper for unzipping a 'NonEmpty' list of @(p, i)@ pairs
+-- into two 'NonEmpty' lists. We dispatch to 'Data.Functor.unzip' when base >= 4.22,
+-- and to 'NonEmpty.unzip' otherwise. Having this in one place under CPP avoids
+-- duplicating large code blocks (and also keeps Fourmolu happy).
+unzipPointsAndScalars ::
+  NonEmpty.NonEmpty (p, i) ->
+  (NonEmpty.NonEmpty p, NonEmpty.NonEmpty i)
+#if MIN_VERSION_base(4,22,0)
+unzipPointsAndScalars = Data.Functor.unzip
+#else
+unzipPointsAndScalars = NonEmpty.unzip
+#endif
+
 -- | Multi-scalar multiplication using the Pippenger algorithm.
 -- The scalar will be brought into the range of modular arithmetic
 -- by means of a modulo operation over the 'scalarPeriod'.
@@ -961,12 +974,8 @@ scalarCanonical scalar =
 blsMSM :: forall curve. BLS curve => NonEmpty.NonEmpty (Point curve, Integer) -> Point curve
 blsMSM psAndSs =
   unsafePerformIO $ do
-#if MIN_VERSION_base(4,22,0)
-    let (points, scalarsAsInt) = Data.Functor.unzip psAndSs
-#else
-    let (points, scalarsAsInt) = NonEmpty.unzip psAndSs
-#endif
-    let numPoints = length points
+    let (points, scalarsAsInt) = unzipPointsAndScalars psAndSs
+        numPoints = length points
         nonEmptyAffinePoints = fmap toAffine points
     nonEmptyScalars <- mapM scalarFromInteger scalarsAsInt
 

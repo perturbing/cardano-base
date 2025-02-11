@@ -1,10 +1,8 @@
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Test.Crypto.EllipticCurve
 where
@@ -21,13 +19,11 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Foldable as F (foldl')
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Proxy (Proxy (..))
 import System.IO.Unsafe (unsafePerformIO)
 import Test.Crypto.Instances ()
 import Test.QuickCheck (
   Arbitrary (..),
-  NonEmptyList (..),
   Property,
   choose,
   chooseAny,

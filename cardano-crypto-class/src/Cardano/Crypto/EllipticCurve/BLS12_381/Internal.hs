@@ -969,7 +969,7 @@ unzipPointsAndScalars = NonEmpty.unzip
 -- | Multi-scalar multiplication using the Pippenger algorithm.
 -- The scalars will be brought into the range of modular arithmetic
 -- by means of a modulo operation over the 'scalarPeriod'.
--- Negative number will also be brought to the range
+-- Negative numbers will also be brought to the range
 -- [0, 'scalarPeriod' - 1] via modular reduction.
 blsMSM :: forall curve. BLS curve => NonEmpty.NonEmpty (Point curve, Integer) -> Point curve
 blsMSM psAndSs =

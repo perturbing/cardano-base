@@ -136,8 +136,8 @@ testBLSCurve name _ =
         BLS.blsMult (BLS.blsMult a b) c === BLS.blsMult (BLS.blsMult a c) b
     , testProperty "scalar mult distributive left" $ \(a :: BLS.Point curve) (BigInteger b) (BigInteger c) ->
         BLS.blsMult a (b + c) === BLS.blsAddOrDouble (BLS.blsMult a b) (BLS.blsMult a c)
-    , testProperty "MSM matches naive approach" $ \(NonEmpty (psAndSs :: [(BLS.Point curve, BigInteger)])) ->
-        let pairs = NonEmpty.fromList [(p, i) | (p, BigInteger i) <- psAndSs]
+    , testProperty "MSM matches naive approach" $ \(psAndSs :: [(BLS.Point curve, BigInteger)]) ->
+        let pairs = [(p, i) | (p, BigInteger i) <- psAndSs]
          in BLS.blsMSM pairs
               === foldr (\(p, s) acc -> BLS.blsAddOrDouble acc (BLS.blsMult p s)) (BLS.blsZero @curve) pairs
     , testProperty "scalar mult distributive right" $ \(a :: BLS.Point curve) (b :: BLS.Point curve) (BigInteger c) ->

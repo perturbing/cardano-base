@@ -967,7 +967,7 @@ unzipPointsAndScalars = NonEmpty.unzip
 #endif
 
 -- | Multi-scalar multiplication using the Pippenger algorithm.
--- The scalar will be brought into the range of modular arithmetic
+-- The scalars will be brought into the range of modular arithmetic
 -- by means of a modulo operation over the 'scalarPeriod'.
 -- Negative number will also be brought to the range
 -- [0, 'scalarPeriod' - 1] via modular reduction.

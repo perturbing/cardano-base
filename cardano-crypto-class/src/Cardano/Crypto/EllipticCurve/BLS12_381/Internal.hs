@@ -171,7 +171,7 @@ import qualified Data.ByteString.Unsafe as BSU
 
 import Data.Proxy (Proxy (..))
 import Data.Void
-import Foreign (poke, sizeOf)
+import Foreign (poke, ptrToIntPtr, sizeOf)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -180,6 +180,7 @@ import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
 import Foreign.Storable (peek)
+import Numeric (showHex)
 import System.IO.Unsafe (unsafePerformIO)
 
 ---- Phantom Types
@@ -302,12 +303,14 @@ withAffineVector :: [Affine curve] -> (AffinePtrVector curve -> IO a) -> IO a
 withAffineVector affines go = do
   let numAffines = length affines
       sizeReference = sizeOf (undefined :: Ptr ())
+  -- Allocate space for the affines and a null terminator
   allocaBytes ((numAffines + 1) * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withAffine` call is properly nested.
     -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withAffine` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
+          -- Add a null terminator to the end of the array
           poke (ptr `advancePtr` numAffines) nullPtr
           go (AffinePtrVector (castPtr ptr))
         accumulate ((ix, affine) : rest) =
@@ -470,13 +473,15 @@ withScalarVector :: [Scalar] -> (ScalarPtrVector -> IO a) -> IO a
 withScalarVector scalars go = do
   let numScalars = length scalars
       sizeReference = sizeOf (undefined :: Ptr ())
+  -- Allocate space for the scalars and a null terminator
   allocaBytes ((numScalars + 1) * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withScalar` call is properly nested.
     -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withScalar` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
-          poke (ptr `advancePtr` numScalars) nullPtr  
+          -- Add a null terminator to the end of the array
+          poke (ptr `advancePtr` numScalars) nullPtr
           go (ScalarPtrVector (castPtr ptr))
         accumulate ((ix, scalar) : rest) =
           withScalar scalar $ \(ScalarPtr sPtr) -> do
@@ -964,22 +969,31 @@ blsMSM psAndSs = unsafePerformIO $ do
           affinePoints = fmap toAffine points
       scalars <- mapM scalarFromInteger scalarsAsInt
 
-      withAffineVector affinePoints $ \affineVectorPtr -> do
-        withScalarVector scalars $ \scalarVectorPtr -> do
+      withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do
+        withScalarVector scalars $ \(ScalarPtrVector scalarVectorPtr) -> do
           let numPoints' :: CSize
               numPoints' = fromIntegral numPoints
               scratchSize :: Int
               scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
 
+          firstPtr <- peek (castPtr affineVectorPtr :: Ptr (Ptr ()))
+          putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtr) ""
+          secondPtr <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
+          putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtr) ""
+
           allocaBytes scratchSize $ \scratchPtr -> do
             withNewPoint' $ \resultPtr -> do
               c_blst_mult_pippenger
                 resultPtr
-                affineVectorPtr
+                (AffinePtrVector affineVectorPtr)
                 numPoints'
-                scalarVectorPtr
+                (ScalarPtrVector scalarVectorPtr)
                 255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
                 (ScratchPtr scratchPtr)
+              firstPtrAfter <- peek (castPtr affineVectorPtr :: Ptr (Ptr ()))
+              putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtrAfter) ""
+              secondPtrAfter <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
+              putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtrAfter) ""
 
 ---- PT operations
 

@@ -302,12 +302,14 @@ withAffineVector :: [Affine curve] -> (AffinePtrVector curve -> IO a) -> IO a
 withAffineVector affines go = do
   let numAffines = length affines
       sizeReference = sizeOf (undefined :: Ptr ())
-  allocaBytes (numAffines * sizeReference) $ \ptr ->
+  allocaBytes ((numAffines + 1) * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withAffine` call is properly nested.
     -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withAffine` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
-    let accumulate [] = go (AffinePtrVector (castPtr ptr))
+    let accumulate [] = do
+          poke (ptr `advancePtr` numAffines) nullPtr
+          go (AffinePtrVector (castPtr ptr))
         accumulate ((ix, affine) : rest) =
           withAffine affine $ \(AffinePtr aPtr) -> do
             poke (ptr `advancePtr` ix) aPtr
@@ -468,12 +470,14 @@ withScalarVector :: [Scalar] -> (ScalarPtrVector -> IO a) -> IO a
 withScalarVector scalars go = do
   let numScalars = length scalars
       sizeReference = sizeOf (undefined :: Ptr ())
-  allocaBytes (numScalars * sizeReference) $ \ptr ->
+  allocaBytes ((numScalars + 1) * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withScalar` call is properly nested.
     -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withScalar` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
-    let accumulate [] = go (ScalarPtrVector (castPtr ptr))
+    let accumulate [] = do
+          poke (ptr `advancePtr` numScalars) nullPtr  
+          go (ScalarPtrVector (castPtr ptr))
         accumulate ((ix, scalar) : rest) =
           withScalar scalar $ \(ScalarPtr sPtr) -> do
             poke (ptr `advancePtr` ix) sPtr

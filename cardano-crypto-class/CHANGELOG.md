@@ -1,5 +1,9 @@
 # Changelog for `cardano-crypto-class`
 
+## 2.2.2.0
+
+* Add `SHA512` and `SHA3_512` algorithms.
+
 ## 2.2.1.0
 
 * Add `NoThunks` constraint on `UnsoundPureSignKeyKES` that was missed during KES changes

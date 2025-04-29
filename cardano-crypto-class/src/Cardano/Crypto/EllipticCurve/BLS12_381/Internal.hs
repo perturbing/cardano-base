@@ -990,13 +990,16 @@ blsMSM psAndSs = unsafePerformIO $ do
             putStrLn $ "Last byte of scratch: " ++ show lastByte
 
             pointCurve <- withNewPoint' @curve $ \resultPtr -> do
-              c_blst_mult_pippenger
-                resultPtr
-                (AffinePtrVector affineVectorPtr)
-                numPoints'
-                (ScalarPtrVector scalarVectorPtr)
-                255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
-                (ScratchPtr scratchPtr)
+              withPoint (head points) $ \in1p -> do
+                withIntScalar (head scalarsAsInt) $ \inSp -> do
+                  c_blst_mult resultPtr in1p inSp (fromIntegral sizeScalar * 8)
+              -- c_blst_mult_pippenger
+              --   resultPtr
+              --   (AffinePtrVector affineVectorPtr)
+              --   numPoints'
+              --   (ScalarPtrVector scalarVectorPtr)
+              --   255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
+              --   (ScratchPtr scratchPtr)
               firstPtrAfter <- peek (castPtr affineVectorPtr :: Ptr (Ptr ()))
               putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtrAfter) ""
               secondPtrAfter <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))

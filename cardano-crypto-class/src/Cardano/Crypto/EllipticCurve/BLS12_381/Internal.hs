@@ -304,14 +304,13 @@ withAffineVector affines go = do
   let numAffines = length affines
       sizeReference = sizeOf (undefined :: Ptr ())
   -- Allocate space for the affines and a null terminator
-  allocaBytes ((numAffines + 1) * sizeReference) $ \ptr ->
+  allocaBytes (numAffines * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withAffine` call is properly nested.
     -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withAffine` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
           -- Add a null terminator to the end of the array
-          poke (ptr `advancePtr` numAffines) nullPtr
           go (AffinePtrVector (castPtr ptr))
         accumulate ((ix, affine) : rest) =
           withAffine affine $ \(AffinePtr aPtr) -> do
@@ -474,14 +473,13 @@ withScalarVector scalars go = do
   let numScalars = length scalars
       sizeReference = sizeOf (undefined :: Ptr ())
   -- Allocate space for the scalars and a null terminator
-  allocaBytes ((numScalars + 1) * sizeReference) $ \ptr ->
+  allocaBytes (numScalars * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withScalar` call is properly nested.
     -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withScalar` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
           -- Add a null terminator to the end of the array
-          poke (ptr `advancePtr` numScalars) nullPtr
           go (ScalarPtrVector (castPtr ptr))
         accumulate ((ix, scalar) : rest) =
           withScalar scalar $ \(ScalarPtr sPtr) -> do

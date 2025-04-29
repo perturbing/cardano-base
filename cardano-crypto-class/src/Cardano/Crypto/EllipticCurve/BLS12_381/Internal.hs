@@ -967,7 +967,6 @@ blsMSM psAndSs = unsafePerformIO $ do
           numPoints = length points
           affinePoints = fmap toAffine points
       scalars <- mapM scalarFromInteger scalarsAsInt
-      putStrLn ("scalar: " ++ show (head scalarsAsInt))
 
       withNewPoint' @curve $ \resultPtr -> do
         withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do

@@ -969,43 +969,38 @@ blsMSM psAndSs = unsafePerformIO $ do
       scalars <- mapM scalarFromInteger scalarsAsInt
       putStrLn ("scalar: " ++ show (head scalarsAsInt))
 
-      withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do
-        withScalarVector scalars $ \(ScalarPtrVector scalarVectorPtr) -> do
-          let numPoints' :: CSize
-              numPoints' = fromIntegral numPoints
-              scratchSize :: Int
-              scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
+      withNewPoint' @curve $ \resultPtr -> do
+        withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do
+          withScalarVector scalars $ \(ScalarPtrVector scalarVectorPtr) -> do
+            let numPoints' :: CSize
+                numPoints' = fromIntegral numPoints
+                scratchSize :: Int
+                scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
 
-          firstPtr <- peek (castPtr affineVectorPtr :: Ptr (Ptr ()))
-          putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtr) ""
-          secondPtr <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
-          putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtr) ""
+            firstPtr <- peek (castPtr affineVectorPtr :: Ptr (Ptr ()))
+            putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtr) ""
+            secondPtr <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
+            putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtr) ""
 
-          putStrLn $ "Scratch size: " ++ show scratchSize
+            putStrLn $ "Scratch size: " ++ show scratchSize
 
-          allocaBytes scratchSize $ \scratchPtr -> do
-            firstByte <- peekByteOff @Word8 scratchPtr 0
-            lastByte <- peekByteOff @Word8 scratchPtr scratchSize
-            putStrLn $ "First byte of scratch: " ++ show firstByte
-            putStrLn $ "Last byte of scratch: " ++ show lastByte
+            allocaBytes scratchSize $ \scratchPtr -> do
+              firstByte <- peekByteOff @Word8 scratchPtr 0
+              lastByte <- peekByteOff @Word8 scratchPtr scratchSize
+              putStrLn $ "First byte of scratch: " ++ show firstByte
+              putStrLn $ "Last byte of scratch: " ++ show lastByte
 
-            pointCurve <- withNewPoint' @curve $ \resultPtr -> do
-              withPoint (head points) $ \in1p -> do
-                withIntScalar (head scalarsAsInt) $ \inSp -> do
-                  c_blst_mult resultPtr in1p inSp (fromIntegral sizeScalar * 8)
-              -- c_blst_mult_pippenger
-              --   resultPtr
-              --   (AffinePtrVector affineVectorPtr)
-              --   numPoints'
-              --   (ScalarPtrVector scalarVectorPtr)
-              --   255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
-              --   (ScratchPtr scratchPtr)
+              c_blst_mult_pippenger
+                resultPtr
+                (AffinePtrVector affineVectorPtr)
+                numPoints'
+                (ScalarPtrVector scalarVectorPtr)
+                255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
+                (ScratchPtr scratchPtr)
               firstPtrAfter <- peek (castPtr affineVectorPtr :: Ptr (Ptr ()))
               putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtrAfter) ""
               secondPtrAfter <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
               putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtrAfter) ""
-            putStrLn $ "Result point: " ++ show (blsCompress pointCurve)
-            return pointCurve
 
 ---- PT operations
 

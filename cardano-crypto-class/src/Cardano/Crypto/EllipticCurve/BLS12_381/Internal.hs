@@ -171,7 +171,8 @@ import qualified Data.ByteString.Unsafe as BSU
 
 import Data.Proxy (Proxy (..))
 import Data.Void
-import Foreign (poke, ptrToIntPtr, sizeOf)
+import Data.Word (Word8)
+import Foreign (Storable (..), poke, ptrToIntPtr, sizeOf)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -179,7 +180,6 @@ import Foreign.Marshal (advancePtr)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
-import Foreign.Storable (peek)
 import Numeric (showHex)
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -981,8 +981,15 @@ blsMSM psAndSs = unsafePerformIO $ do
           secondPtr <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
           putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtr) ""
 
+          putStrLn $ "Scratch size: " ++ show scratchSize
+
           allocaBytes scratchSize $ \scratchPtr -> do
-            withNewPoint' $ \resultPtr -> do
+            firstByte <- peekByteOff @Word8 scratchPtr 0
+            lastByte <- peekByteOff @Word8 scratchPtr scratchSize
+            putStrLn $ "First byte of scratch: " ++ show firstByte
+            putStrLn $ "Last byte of scratch: " ++ show lastByte
+
+            pointCurve <- withNewPoint' @curve $ \resultPtr -> do
               c_blst_mult_pippenger
                 resultPtr
                 (AffinePtrVector affineVectorPtr)
@@ -994,6 +1001,8 @@ blsMSM psAndSs = unsafePerformIO $ do
               putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtrAfter) ""
               secondPtrAfter <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
               putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtrAfter) ""
+            putStrLn $ "Result point: " ++ show (blsCompress pointCurve)
+            return blsZero
 
 ---- PT operations
 

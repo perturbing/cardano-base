@@ -991,6 +991,8 @@ blsMSM psAndSs = unsafePerformIO $ do
               let resultPtr' = castPtr resultPtr :: Ptr Word8
               bytesBefore <- peekArray (fromIntegral (serializedSizePoint (Proxy @curve))) resultPtr'
               putStrLn $ "result ptr content before C Call: " ++ show bytesBefore
+              isOnCurve <- c_blst_on_curve (PointPtr @curve resultPtr)
+              putStrLn $ "Is on curve before C call: " ++ show isOnCurve
 
               c_blst_mult_pippenger
                 (PointPtr @curve resultPtr)
@@ -1003,8 +1005,10 @@ blsMSM psAndSs = unsafePerformIO $ do
               putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtrAfter) ""
               secondPtrAfter <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
               putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtrAfter) ""
-              bytesAfter <- peekArray (fromIntegral (serializedSizePoint (Proxy @curve))) resultPtr'
+              bytesAfter <- peekArray (serializedSizePoint (Proxy @curve)) resultPtr'
               putStrLn $ "result ptr content after C Call: " ++ show bytesAfter
+              isOnCurveAfter <- c_blst_on_curve (PointPtr @curve resultPtr)
+              putStrLn $ "Is on curve after C call: " ++ show isOnCurveAfter
       print $ BS.unpack $ blsCompress pointCurve
       return pointCurve
 

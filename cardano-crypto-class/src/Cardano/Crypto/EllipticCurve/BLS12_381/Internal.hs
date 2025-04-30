@@ -172,7 +172,7 @@ import qualified Data.ByteString.Unsafe as BSU
 import Data.Proxy (Proxy (..))
 import Data.Void
 import Data.Word (Word8)
-import Foreign (Storable (..), poke, ptrToIntPtr, sizeOf)
+import Foreign (Storable (..), peekArray, poke, ptrToIntPtr, sizeOf)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -968,7 +968,7 @@ blsMSM psAndSs = unsafePerformIO $ do
           affinePoints = fmap toAffine points
       scalars <- mapM scalarFromInteger scalarsAsInt
 
-      withNewPoint' @curve $ \resultPtr -> do
+      pointCurve <- withNewPoint' @curve $ \(PointPtr resultPtr) -> do
         withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do
           withScalarVector scalars $ \(ScalarPtrVector scalarVectorPtr) -> do
             let numPoints' :: CSize
@@ -988,9 +988,12 @@ blsMSM psAndSs = unsafePerformIO $ do
               lastByte <- peekByteOff @Word8 scratchPtr scratchSize
               putStrLn $ "First byte of scratch: " ++ show firstByte
               putStrLn $ "Last byte of scratch: " ++ show lastByte
+              let resultPtr' = castPtr resultPtr :: Ptr Word8
+              bytesBefore <- peekArray (fromIntegral (serializedSizePoint (Proxy @curve))) resultPtr'
+              putStrLn $ "result ptr content before C Call: " ++ show bytesBefore
 
               c_blst_mult_pippenger
-                resultPtr
+                (PointPtr @curve resultPtr)
                 (AffinePtrVector affineVectorPtr)
                 numPoints'
                 (ScalarPtrVector scalarVectorPtr)
@@ -1000,6 +1003,10 @@ blsMSM psAndSs = unsafePerformIO $ do
               putStrLn $ "First affine pointer: 0x" ++ showHex (ptrToIntPtr firstPtrAfter) ""
               secondPtrAfter <- peek (castPtr scalarVectorPtr :: Ptr (Ptr ()))
               putStrLn $ "Second scalar pointer: 0x" ++ showHex (ptrToIntPtr secondPtrAfter) ""
+              bytesAfter <- peekArray (fromIntegral (serializedSizePoint (Proxy @curve))) resultPtr'
+              putStrLn $ "result ptr content after C Call: " ++ show bytesAfter
+      print $ BS.unpack $ blsCompress pointCurve
+      return pointCurve
 
 ---- PT operations
 

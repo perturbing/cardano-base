@@ -983,7 +983,7 @@ blsMSM psAndSs = unsafePerformIO $ do
 
             putStrLn $ "Scratch size: " ++ show scratchSize
 
-            allocaBytes scratchSize $ \scratchPtr -> do
+            allocaBytes (scratchSize * 8) $ \scratchPtr -> do
               firstByte <- peekByteOff @Word8 scratchPtr 0
               lastByte <- peekByteOff @Word8 scratchPtr scratchSize
               putStrLn $ "First byte of scratch: " ++ show firstByte

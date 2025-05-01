@@ -172,8 +172,8 @@ import qualified Data.ByteString.Unsafe as BSU
 import Control.Monad (forM)
 import Data.Proxy (Proxy (..))
 import Data.Void
-
-import Foreign (Storable (..), poke, sizeOf)
+import Data.Word (Word8)
+import Foreign (Storable (..), peekArray, poke, ptrToIntPtr, sizeOf)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -181,7 +181,7 @@ import Foreign.Marshal (advancePtr)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
-
+import Numeric (showHex)
 import System.IO.Unsafe (unsafePerformIO)
 
 ---- Phantom Types
@@ -972,7 +972,7 @@ blsMSM psAndSs = unsafePerformIO $ do
           numPoints = length points
           affinePoints = fmap toAffine points
 
-      withNewPoint' @curve $ \(PointPtr resultPtr) -> do
+      pointCurve <- withNewPoint' @curve $ \(PointPtr resultPtr) -> do
         withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do
           withScalarVector scalars $ \(ScalarPtrVector scalarVectorPtr) -> do
             let numPoints' :: CSize
@@ -980,7 +980,15 @@ blsMSM psAndSs = unsafePerformIO $ do
                 scratchSize :: Int
                 scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
 
-            allocaBytes (scratchSize * 8) $ \scratchPtr -> do
+            putStrLn $ "Scratch size: " ++ show scratchSize
+
+            allocaBytes scratchSize $ \scratchPtr -> do
+              let resultPtr' = castPtr resultPtr :: Ptr Word8
+              bytesBefore <- peekArray (fromIntegral (serializedSizePoint (Proxy @curve))) resultPtr'
+              putStrLn $ "result ptr content before C Call: " ++ show bytesBefore
+              isOnCurve <- c_blst_on_curve (PointPtr @curve resultPtr)
+              putStrLn $ "Is on curve before C call: " ++ show isOnCurve
+
               c_blst_mult_pippenger
                 (PointPtr @curve resultPtr)
                 (AffinePtrVector affineVectorPtr)
@@ -988,6 +996,12 @@ blsMSM psAndSs = unsafePerformIO $ do
                 (ScalarPtrVector scalarVectorPtr)
                 255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
                 (ScratchPtr scratchPtr)
+              bytesAfter <- peekArray (serializedSizePoint (Proxy @curve)) resultPtr'
+              putStrLn $ "result ptr content after C Call: " ++ show bytesAfter
+              isOnCurveAfter <- c_blst_on_curve (PointPtr @curve resultPtr)
+              putStrLn $ "Is on curve after C call: " ++ show isOnCurveAfter
+      print $ BS.unpack $ blsCompress pointCurve
+      return pointCurve
 
 ---- PT operations
 

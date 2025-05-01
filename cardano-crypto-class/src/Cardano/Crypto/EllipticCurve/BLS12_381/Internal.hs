@@ -966,6 +966,9 @@ blsMSM psAndSs = unsafePerformIO $ do
   let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
   case filteredPoints of
     [] -> return blsZero
+    [(pt, scalar)] -> do
+      i <- scalarToInteger scalar
+      return (blsMult pt i)
     _ -> do
       let (points, scalars) = unzip filteredPoints
           numPoints = length points

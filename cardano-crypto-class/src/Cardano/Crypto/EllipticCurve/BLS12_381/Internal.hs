@@ -173,7 +173,7 @@ import Control.Monad (forM)
 import Data.Proxy (Proxy (..))
 import Data.Void
 import Data.Word (Word8)
-import Foreign (Storable (..), peekArray, poke, ptrToIntPtr, sizeOf)
+import Foreign (Storable (..), peekArray, poke, sizeOf)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -181,7 +181,6 @@ import Foreign.Marshal (advancePtr)
 import Foreign.Marshal.Alloc (allocaBytes)
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr, plusPtr)
-import Numeric (showHex)
 import System.IO.Unsafe (unsafePerformIO)
 
 ---- Phantom Types

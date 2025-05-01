@@ -172,8 +172,7 @@ import qualified Data.ByteString.Unsafe as BSU
 import Control.Monad (forM)
 import Data.Proxy (Proxy (..))
 import Data.Void
-import Data.Word (Word8)
-import Foreign (Storable (..), peekArray, poke, sizeOf)
+import Foreign (Storable (..), poke, sizeOf)
 import Foreign.C.String
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -963,47 +962,50 @@ blsMSM psAndSs = unsafePerformIO $ do
     s <- scalarFromInteger i
     return (pt, s)
   zeroScalar <- scalarFromInteger 0
+  -- We filter out pairs that will not contribute to the result
   let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
   case filteredPoints of
     [] -> return blsZero
+    -- If there is only one point, we refert to blsMult function
+    -- The blst_mult_pippenger C call will also not work for
+    -- this case on windows builds.
+    --
+    -- in costing this function, we might consider a cutoff
+    -- point where we switch to blsMult instead of
+    -- blst_mult_pippenger
     [(pt, scalar)] -> do
       i <- scalarToInteger scalar
       return (blsMult pt i)
     _ -> do
       let (points, scalars) = unzip filteredPoints
           numPoints = length points
+          -- TODO: we can use a more efficient way to convert
+          -- points to affine coordinates, using
+          -- blst_p1s_to_affine and blst_p2s_to_affine
+          -- Note that these both will fault if the inputs
+          -- contain points at infinity (why we filter above)
           affinePoints = fmap toAffine points
 
-      pointCurve <- withNewPoint' @curve $ \(PointPtr resultPtr) -> do
-        withAffineVector affinePoints $ \(AffinePtrVector affineVectorPtr) -> do
-          withScalarVector scalars $ \(ScalarPtrVector scalarVectorPtr) -> do
+      withNewPoint' @curve $ \resultPtr -> do
+        withAffineVector affinePoints $ \affineVectorPtr -> do
+          withScalarVector scalars $ \scalarVectorPtr -> do
             let numPoints' :: CSize
                 numPoints' = fromIntegral numPoints
                 scratchSize :: Int
                 scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
-
-            putStrLn $ "Scratch size: " ++ show scratchSize
+                -- Multiply by 8, because blst_mult_pippenger takes number of *bits*, but
+                -- sizeScalar is in *bytes*
+                nbits :: CSize
+                nbits = fromIntegral @Int @CSize $ sizeScalar * 8
 
             allocaBytes scratchSize $ \scratchPtr -> do
-              let resultPtr' = castPtr resultPtr :: Ptr Word8
-              bytesBefore <- peekArray (fromIntegral (serializedSizePoint (Proxy @curve))) resultPtr'
-              putStrLn $ "result ptr content before C Call: " ++ show bytesBefore
-              isOnCurve <- c_blst_on_curve (PointPtr @curve resultPtr)
-              putStrLn $ "Is on curve before C call: " ++ show isOnCurve
-
               c_blst_mult_pippenger
-                (PointPtr @curve resultPtr)
-                (AffinePtrVector affineVectorPtr)
+                resultPtr
+                affineVectorPtr
                 numPoints'
-                (ScalarPtrVector scalarVectorPtr)
-                255 -- 255 bits is the size of the scalar field (bound by the scalarPeriod below)
+                scalarVectorPtr
+                nbits
                 (ScratchPtr scratchPtr)
-              bytesAfter <- peekArray (serializedSizePoint (Proxy @curve)) resultPtr'
-              putStrLn $ "result ptr content after C Call: " ++ show bytesAfter
-              isOnCurveAfter <- c_blst_on_curve (PointPtr @curve resultPtr)
-              putStrLn $ "Is on curve after C call: " ++ show isOnCurveAfter
-      print $ BS.unpack $ blsCompress pointCurve
-      return pointCurve
 
 ---- PT operations
 

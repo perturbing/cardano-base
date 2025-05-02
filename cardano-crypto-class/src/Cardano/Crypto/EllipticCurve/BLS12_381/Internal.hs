@@ -132,6 +132,7 @@ module Cardano.Crypto.EllipticCurve.BLS12_381.Internal (
   blsCneg,
   blsNeg,
   blsMSM,
+  blsMSM',
   blsCompress,
   blsSerialize,
   blsUncompress,
@@ -169,7 +170,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Data.ByteString.Unsafe as BSU
 
-import Control.Monad (forM)
+import Control.Monad (forM, forM_)
 import Data.Proxy (Proxy (..))
 import Data.Void
 import Foreign (Storable (..), poke, sizeOf)
@@ -190,9 +191,13 @@ data Curve2
 ---- Unsafe PointPtr types
 
 newtype PointPtr curve = PointPtr (Ptr Void)
+newtype PointPtrVector curve = PointPtrVector (Ptr Void)
 
 type Point1Ptr = PointPtr Curve1
 type Point2Ptr = PointPtr Curve2
+
+type Point1PtrVector = PointPtrVector Curve1
+type Point2PtrVector = PointPtrVector Curve2
 
 newtype AffinePtr curve = AffinePtr (Ptr Void)
 newtype AffinePtrVector curve = AffinePtrVector (Ptr Void)
@@ -318,6 +323,25 @@ withAffineVector affines go = do
             accumulate rest
      in accumulate (zip [0 ..] affines)
 
+withPointVector :: [Point curve] -> (PointPtrVector curve -> IO a) -> IO a
+withPointVector points go = do
+  let numPoints = length points
+      sizeReference = sizeOf (undefined :: Ptr ())
+  -- Allocate space for the points and a null terminator
+  allocaBytes ((numPoints + 1) * sizeReference) $ \ptr ->
+    -- The accumulate function ensures that each `withPoint` call is properly nested.
+    -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
+    -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
+    -- By nesting `withPoint` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
+    let accumulate [] = do
+          poke (ptr `advancePtr` numPoints) nullPtr
+          go (PointPtrVector (castPtr ptr))
+        accumulate ((ix, point) : rest) =
+          withPoint point $ \(PointPtr pPtr) -> do
+            poke (ptr `advancePtr` ix) pPtr
+            accumulate rest
+     in accumulate (zip [0 ..] points)
+
 withPT :: PT -> (PTPtr -> IO a) -> IO a
 withPT (PT pt) go = withForeignPtr pt (go . PTPtr)
 
@@ -348,6 +372,7 @@ class BLS curve where
   c_blst_cneg :: PointPtr curve -> Bool -> IO ()
 
   c_blst_scratch_sizeof :: Proxy curve -> CSize -> CSize
+  c_blst_to_affines :: AffinePtrVector curve -> PointPtrVector curve -> CSize -> IO ()
   c_blst_mult_pippenger ::
     PointPtr curve -> AffinePtrVector curve -> CSize -> ScalarPtrVector -> CSize -> ScratchPtr -> IO ()
 
@@ -380,6 +405,7 @@ instance BLS Curve1 where
   c_blst_cneg = c_blst_p1_cneg
 
   c_blst_scratch_sizeof _ = c_blst_p1s_mult_pippenger_scratch_sizeof
+  c_blst_to_affines = c_blst_p1s_to_affine
   c_blst_mult_pippenger = c_blst_p1s_mult_pippenger
 
   c_blst_hash = c_blst_hash_to_g1
@@ -411,6 +437,7 @@ instance BLS Curve2 where
   c_blst_cneg = c_blst_p2_cneg
 
   c_blst_scratch_sizeof _ = c_blst_p2s_mult_pippenger_scratch_sizeof
+  c_blst_to_affines = c_blst_p2s_to_affine
   c_blst_mult_pippenger = c_blst_p2s_mult_pippenger
 
   c_blst_hash = c_blst_hash_to_g2
@@ -618,6 +645,8 @@ foreign import ccall "blst_p1_is_inf" c_blst_p1_is_inf :: Point1Ptr -> IO Bool
 
 foreign import ccall "blst_p1s_mult_pippenger_scratch_sizeof"
   c_blst_p1s_mult_pippenger_scratch_sizeof :: CSize -> CSize
+foreign import ccall "blst_p1s_to_affine"
+  c_blst_p1s_to_affine :: Affine1PtrVector -> Point1PtrVector -> CSize -> IO ()
 foreign import ccall "blst_p1s_mult_pippenger"
   c_blst_p1s_mult_pippenger ::
     Point1Ptr -> Affine1PtrVector -> CSize -> ScalarPtrVector -> CSize -> ScratchPtr -> IO ()
@@ -651,6 +680,8 @@ foreign import ccall "blst_p2_is_inf" c_blst_p2_is_inf :: Point2Ptr -> IO Bool
 
 foreign import ccall "blst_p2s_mult_pippenger_scratch_sizeof"
   c_blst_p2s_mult_pippenger_scratch_sizeof :: CSize -> CSize
+foreign import ccall "blst_p2s_to_affine"
+  c_blst_p2s_to_affine :: Affine2PtrVector -> Point2PtrVector -> CSize -> IO ()
 foreign import ccall "blst_p2s_mult_pippenger"
   c_blst_p2s_mult_pippenger ::
     Point2Ptr -> Affine2PtrVector -> CSize -> ScalarPtrVector -> CSize -> ScratchPtr -> IO ()
@@ -1006,6 +1037,64 @@ blsMSM psAndSs = unsafePerformIO $ do
                 scalarVectorPtr
                 nbits
                 (ScratchPtr scratchPtr)
+
+-- | A faster version of blsMSM that does the converting of points to affine
+-- via blst_p1s_to_affine and blst_p2s_to_affine instead of multiple calls to
+-- blst_p1_to_affine and blst_p2_to_affine. Note that blst_p1s_to_affine
+-- is unsafe for points at infinity, so we need to filter them out!
+blsMSM' :: forall curve. BLS curve => [(Point curve, Integer)] -> Point curve
+blsMSM' psAndSs = unsafePerformIO $ do
+  psAndScalars <- forM psAndSs $ \(pt, i) -> do
+    s <- scalarFromInteger i
+    return (pt, s)
+  zeroScalar <- scalarFromInteger 0
+  -- We filter out pairs that will not contribute to the result
+  let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
+  case filteredPoints of
+    [] -> return blsZero
+    -- If there is only one point, we refert to blsMult function
+    -- The blst_mult_pippenger C call will also not work for
+    -- this case on windows builds.
+    [(pt, scalar)] -> do
+      i <- scalarToInteger scalar
+      return (blsMult pt i)
+    _ -> do
+      let (points, scalars) = unzip filteredPoints
+          numPoints = length points
+
+      withNewPoint' @curve $ \resultPtr -> do
+        withPointVector points $ \pointVectorPtr -> do
+          withScalarVector scalars $ \scalarVectorPtr -> do
+            let numPoints' :: CSize
+                numPoints' = fromIntegral numPoints
+                scratchSize :: Int
+                scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
+                -- Multiply by 8, because blst_mult_pippenger takes number of *bits*, but
+                -- sizeScalar is in *bytes*
+                nbits :: CSize
+                nbits = fromIntegral @Int @CSize $ sizeScalar * 8
+            allocaBytes (numPoints * sizeAffine (Proxy @curve)) $ \affinesPtr -> do
+              c_blst_to_affines (AffinePtrVector affinesPtr) pointVectorPtr numPoints'
+              -- Note that the above call to c_blst_to_affines returns the affinesPtr as a
+              -- continuous block of memory. That while c_blst_mult_pippenger expects
+              -- an array of pointers to the affine points. So we need to create a new
+              -- array of pointers to the affine points with a null terminator at the end.
+              allocaBytes ((numPoints + 1) * sizeOf (nullPtr :: Ptr ())) $ \affineVectorPtr -> do
+                -- Populate array of pointers
+                forM_ [0 .. numPoints - 1] $ \i -> do
+                  let ptr = affinesPtr `plusPtr` (i * sizeAffine (Proxy @curve))
+                  pokeElemOff (castPtr affineVectorPtr :: Ptr (Ptr ())) i ptr
+                -- Null terminate pointer
+                pokeElemOff (castPtr affineVectorPtr :: Ptr (Ptr ())) numPoints nullPtr
+
+                allocaBytes scratchSize $ \scratchPtr -> do
+                  c_blst_mult_pippenger
+                    resultPtr
+                    (AffinePtrVector affineVectorPtr)
+                    numPoints'
+                    scalarVectorPtr
+                    nbits
+                    (ScratchPtr scratchPtr)
 
 ---- PT operations
 

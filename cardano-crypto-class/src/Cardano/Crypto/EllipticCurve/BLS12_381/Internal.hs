@@ -9,9 +9,12 @@
 
 module Cardano.Crypto.EllipticCurve.BLS12_381.Internal (
   -- * Unsafe Types
-  ScalarPtr,
+  ScalarPtr (..),
   PointPtr (..),
-  AffinePtr,
+  PointArrayPtr (..),
+  AffinePtr (..),
+  AffineArrayPtr (..),
+  AffineBlockPtr (..),
   Point1Ptr,
   Point2Ptr,
   Affine1Ptr,
@@ -55,6 +58,7 @@ module Cardano.Crypto.EllipticCurve.BLS12_381.Internal (
     c_blst_mult,
     c_blst_cneg,
     c_blst_scratch_sizeof,
+    c_blst_to_affines,
     c_blst_mult_pippenger,
     c_blst_hash,
     c_blst_compress,
@@ -190,23 +194,35 @@ data Curve2
 
 ---- Unsafe PointPtr types
 
+-- A pointer to a (projective) point one of the two elliptical curves
 newtype PointPtr curve = PointPtr (Ptr Void)
-newtype PointPtrVector curve = PointPtrVector (Ptr Void)
+
+-- A pointer to a null-terminated array of pointers to points
+newtype PointArrayPtr curve = PointArrayPtr (Ptr Void)
 
 type Point1Ptr = PointPtr Curve1
 type Point2Ptr = PointPtr Curve2
 
-type Point1PtrVector = PointPtrVector Curve1
-type Point2PtrVector = PointPtrVector Curve2
+type Point1ArrayPtr = PointArrayPtr Curve1
+type Point2ArrayPtr = PointArrayPtr Curve2
 
+-- A pointer to an affine point on one of the two elliptical curves
 newtype AffinePtr curve = AffinePtr (Ptr Void)
-newtype AffinePtrVector curve = AffinePtrVector (Ptr Void)
+
+-- A pointer to a contiguous array of affine points
+newtype AffineBlockPtr curve = AffineBlockPtr (Ptr Void)
+
+-- A pointer to a null-terminated array of pointers to affine points
+newtype AffineArrayPtr curve = AffineArrayPtr (Ptr Void)
 
 type Affine1Ptr = AffinePtr Curve1
 type Affine2Ptr = AffinePtr Curve2
 
-type Affine1PtrVector = AffinePtrVector Curve1
-type Affine2PtrVector = AffinePtrVector Curve2
+type Affine1BlockPtr = AffineBlockPtr Curve1
+type Affine2BlockPtr = AffineBlockPtr Curve2
+
+type Affine1ArrayPtr = AffineArrayPtr Curve1
+type Affine2ArrayPtr = AffineArrayPtr Curve2
 
 newtype PTPtr = PTPtr (Ptr Void)
 
@@ -303,8 +319,8 @@ withNewAffine_ = fmap fst . withNewAffine
 withNewAffine' :: BLS curve => (AffinePtr curve -> IO a) -> IO (Affine curve)
 withNewAffine' = fmap snd . withNewAffine
 
-withAffineVector :: [Affine curve] -> (AffinePtrVector curve -> IO a) -> IO a
-withAffineVector affines go = do
+withAffineArray :: [Affine curve] -> (AffineArrayPtr curve -> IO a) -> IO a
+withAffineArray affines go = do
   let numAffines = length affines
       sizeReference = sizeOf (undefined :: Ptr ())
   -- Allocate space for the affines and a null terminator
@@ -316,15 +332,15 @@ withAffineVector affines go = do
     let accumulate [] = do
           -- Add a null terminator to the end of the array
           poke (ptr `advancePtr` numAffines) nullPtr
-          go (AffinePtrVector (castPtr ptr))
+          go (AffineArrayPtr (castPtr ptr))
         accumulate ((ix, affine) : rest) =
           withAffine affine $ \(AffinePtr aPtr) -> do
             poke (ptr `advancePtr` ix) aPtr
             accumulate rest
      in accumulate (zip [0 ..] affines)
 
-withPointVector :: [Point curve] -> (PointPtrVector curve -> IO a) -> IO a
-withPointVector points go = do
+withPointArray :: [Point curve] -> (PointArrayPtr curve -> IO a) -> IO a
+withPointArray points go = do
   let numPoints = length points
       sizeReference = sizeOf (undefined :: Ptr ())
   -- Allocate space for the points and a null terminator
@@ -335,12 +351,27 @@ withPointVector points go = do
     -- By nesting `withPoint` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
           poke (ptr `advancePtr` numPoints) nullPtr
-          go (PointPtrVector (castPtr ptr))
+          go (PointArrayPtr (castPtr ptr))
         accumulate ((ix, point) : rest) =
           withPoint point $ \(PointPtr pPtr) -> do
             poke (ptr `advancePtr` ix) pPtr
             accumulate rest
      in accumulate (zip [0 ..] points)
+
+-- | Given a block of affine points and a count, produce a null-terminated
+-- pointer array
+withAffineBlockArrayPtr ::
+  forall curve a.
+  BLS curve =>
+  Ptr Void -> Int -> (AffineArrayPtr curve -> IO a) -> IO a
+withAffineBlockArrayPtr affinesBlockPtr numPoints go = do
+  allocaBytes ((numPoints + 1) * sizeOf (nullPtr :: Ptr ())) $ \affineVectorPtr -> do
+    let ptrArray = castPtr affineVectorPtr :: Ptr (Ptr ())
+    forM_ [0 .. numPoints - 1] $ \i -> do
+      let ptr = affinesBlockPtr `plusPtr` (i * sizeAffine (Proxy @curve))
+      pokeElemOff ptrArray i ptr
+    pokeElemOff ptrArray numPoints nullPtr
+    go (AffineArrayPtr affineVectorPtr)
 
 withPT :: PT -> (PTPtr -> IO a) -> IO a
 withPT (PT pt) go = withForeignPtr pt (go . PTPtr)
@@ -372,9 +403,9 @@ class BLS curve where
   c_blst_cneg :: PointPtr curve -> Bool -> IO ()
 
   c_blst_scratch_sizeof :: Proxy curve -> CSize -> CSize
-  c_blst_to_affines :: AffinePtrVector curve -> PointPtrVector curve -> CSize -> IO ()
+  c_blst_to_affines :: AffineBlockPtr curve -> PointArrayPtr curve -> CSize -> IO ()
   c_blst_mult_pippenger ::
-    PointPtr curve -> AffinePtrVector curve -> CSize -> ScalarPtrVector -> CSize -> ScratchPtr -> IO ()
+    PointPtr curve -> AffineArrayPtr curve -> CSize -> ScalarArrayPtr -> CSize -> ScratchPtr -> IO ()
 
   c_blst_hash ::
     PointPtr curve -> Ptr CChar -> CSize -> Ptr CChar -> CSize -> Ptr CChar -> CSize -> IO ()
@@ -495,8 +526,8 @@ withNewScalar_ = fmap fst . withNewScalar
 withNewScalar' :: (ScalarPtr -> IO a) -> IO Scalar
 withNewScalar' = fmap snd . withNewScalar
 
-withScalarVector :: [Scalar] -> (ScalarPtrVector -> IO a) -> IO a
-withScalarVector scalars go = do
+withScalarArray :: [Scalar] -> (ScalarArrayPtr -> IO a) -> IO a
+withScalarArray scalars go = do
   let numScalars = length scalars
       sizeReference = sizeOf (undefined :: Ptr ())
   -- Allocate space for the scalars and a null terminator
@@ -506,8 +537,9 @@ withScalarVector scalars go = do
     -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
     -- By nesting `withScalar` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
+          -- Add a null terminator to the end of the array
           poke (ptr `advancePtr` numScalars) nullPtr
-          go (ScalarPtrVector (castPtr ptr))
+          go (ScalarArrayPtr (castPtr ptr))
         accumulate ((ix, scalar) : rest) =
           withScalar scalar $ \(ScalarPtr sPtr) -> do
             poke (ptr `advancePtr` ix) sPtr
@@ -598,7 +630,9 @@ scalarFromInteger n = do
 ---- Unsafe types
 
 newtype ScalarPtr = ScalarPtr (Ptr Void)
-newtype ScalarPtrVector = ScalarPtrVector (Ptr Void)
+
+-- A pointer to a null-terminated array of pointers to scalars
+newtype ScalarArrayPtr = ScalarArrayPtr (Ptr Void)
 newtype FrPtr = FrPtr (Ptr Void)
 newtype ScratchPtr = ScratchPtr (Ptr Void)
 
@@ -646,10 +680,10 @@ foreign import ccall "blst_p1_is_inf" c_blst_p1_is_inf :: Point1Ptr -> IO Bool
 foreign import ccall "blst_p1s_mult_pippenger_scratch_sizeof"
   c_blst_p1s_mult_pippenger_scratch_sizeof :: CSize -> CSize
 foreign import ccall "blst_p1s_to_affine"
-  c_blst_p1s_to_affine :: Affine1PtrVector -> Point1PtrVector -> CSize -> IO ()
+  c_blst_p1s_to_affine :: Affine1BlockPtr -> Point1ArrayPtr -> CSize -> IO ()
 foreign import ccall "blst_p1s_mult_pippenger"
   c_blst_p1s_mult_pippenger ::
-    Point1Ptr -> Affine1PtrVector -> CSize -> ScalarPtrVector -> CSize -> ScratchPtr -> IO ()
+    Point1Ptr -> Affine1ArrayPtr -> CSize -> ScalarArrayPtr -> CSize -> ScratchPtr -> IO ()
 
 ---- Raw Point2 functions
 
@@ -681,10 +715,10 @@ foreign import ccall "blst_p2_is_inf" c_blst_p2_is_inf :: Point2Ptr -> IO Bool
 foreign import ccall "blst_p2s_mult_pippenger_scratch_sizeof"
   c_blst_p2s_mult_pippenger_scratch_sizeof :: CSize -> CSize
 foreign import ccall "blst_p2s_to_affine"
-  c_blst_p2s_to_affine :: Affine2PtrVector -> Point2PtrVector -> CSize -> IO ()
+  c_blst_p2s_to_affine :: Affine2BlockPtr -> Point2ArrayPtr -> CSize -> IO ()
 foreign import ccall "blst_p2s_mult_pippenger"
   c_blst_p2s_mult_pippenger ::
-    Point2Ptr -> Affine2PtrVector -> CSize -> ScalarPtrVector -> CSize -> ScratchPtr -> IO ()
+    Point2Ptr -> Affine2ArrayPtr -> CSize -> ScalarArrayPtr -> CSize -> ScratchPtr -> IO ()
 
 ---- Affine operations
 
@@ -993,7 +1027,7 @@ blsMSM psAndSs = unsafePerformIO $ do
     s <- scalarFromInteger i
     return (pt, s)
   zeroScalar <- scalarFromInteger 0
-  -- We filter out pairs that will not contribute to the result
+  -- We filter out pairs that will not contribute to the result and safety
   let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
   case filteredPoints of
     [] -> return blsZero
@@ -1018,8 +1052,8 @@ blsMSM psAndSs = unsafePerformIO $ do
           affinePoints = fmap toAffine points
 
       withNewPoint' @curve $ \resultPtr -> do
-        withAffineVector affinePoints $ \affineVectorPtr -> do
-          withScalarVector scalars $ \scalarVectorPtr -> do
+        withAffineArray affinePoints $ \affineArrayPtr -> do
+          withScalarArray scalars $ \scalarArrayPtr -> do
             let numPoints' :: CSize
                 numPoints' = fromIntegral numPoints
                 scratchSize :: Int
@@ -1032,9 +1066,9 @@ blsMSM psAndSs = unsafePerformIO $ do
             allocaBytes scratchSize $ \scratchPtr -> do
               c_blst_mult_pippenger
                 resultPtr
-                affineVectorPtr
+                affineArrayPtr
                 numPoints'
-                scalarVectorPtr
+                scalarArrayPtr
                 nbits
                 (ScratchPtr scratchPtr)
 
@@ -1048,7 +1082,7 @@ blsMSM' psAndSs = unsafePerformIO $ do
     s <- scalarFromInteger i
     return (pt, s)
   zeroScalar <- scalarFromInteger 0
-  -- We filter out pairs that will not contribute to the result
+  -- We filter out pairs that will not contribute to the result and safety
   let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
   case filteredPoints of
     [] -> return blsZero
@@ -1063,8 +1097,8 @@ blsMSM' psAndSs = unsafePerformIO $ do
           numPoints = length points
 
       withNewPoint' @curve $ \resultPtr -> do
-        withPointVector points $ \pointVectorPtr -> do
-          withScalarVector scalars $ \scalarVectorPtr -> do
+        withPointArray points $ \pointArrayPtr -> do
+          withScalarArray scalars $ \scalarArrayPtr -> do
             let numPoints' :: CSize
                 numPoints' = fromIntegral numPoints
                 scratchSize :: Int
@@ -1073,26 +1107,15 @@ blsMSM' psAndSs = unsafePerformIO $ do
                 -- sizeScalar is in *bytes*
                 nbits :: CSize
                 nbits = fromIntegral @Int @CSize $ sizeScalar * 8
-            allocaBytes (numPoints * sizeAffine (Proxy @curve)) $ \affinesPtr -> do
-              c_blst_to_affines (AffinePtrVector affinesPtr) pointVectorPtr numPoints'
-              -- Note that the above call to c_blst_to_affines returns the affinesPtr as a
-              -- continuous block of memory. That while c_blst_mult_pippenger expects
-              -- an array of pointers to the affine points. So we need to create a new
-              -- array of pointers to the affine points with a null terminator at the end.
-              allocaBytes ((numPoints + 1) * sizeOf (nullPtr :: Ptr ())) $ \affineVectorPtr -> do
-                -- Populate array of pointers
-                forM_ [0 .. numPoints - 1] $ \i -> do
-                  let ptr = affinesPtr `plusPtr` (i * sizeAffine (Proxy @curve))
-                  pokeElemOff (castPtr affineVectorPtr :: Ptr (Ptr ())) i ptr
-                -- Null terminate pointer
-                pokeElemOff (castPtr affineVectorPtr :: Ptr (Ptr ())) numPoints nullPtr
-
+            allocaBytes (numPoints * sizeAffine (Proxy @curve)) $ \affinesBlockPtr -> do
+              c_blst_to_affines (AffineBlockPtr affinesBlockPtr) pointArrayPtr numPoints'
+              withAffineBlockArrayPtr affinesBlockPtr numPoints $ \affineArrayPtr -> do
                 allocaBytes scratchSize $ \scratchPtr -> do
                   c_blst_mult_pippenger
                     resultPtr
-                    (AffinePtrVector affineVectorPtr)
+                    affineArrayPtr
                     numPoints'
-                    scalarVectorPtr
+                    scalarArrayPtr
                     nbits
                     (ScratchPtr scratchPtr)
 

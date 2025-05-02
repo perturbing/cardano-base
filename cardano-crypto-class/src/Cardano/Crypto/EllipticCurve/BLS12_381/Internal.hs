@@ -322,7 +322,7 @@ withNewAffine' = fmap snd . withNewAffine
 withAffineArray :: [Affine curve] -> (AffineArrayPtr curve -> IO a) -> IO a
 withAffineArray affines go = do
   let numAffines = length affines
-      sizeReference = sizeOf (undefined :: Ptr ())
+      sizeReference = sizeOf (nullPtr :: Ptr ())
   -- Allocate space for the affines and a null terminator
   allocaBytes ((numAffines + 1) * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withAffine` call is properly nested.
@@ -342,7 +342,7 @@ withAffineArray affines go = do
 withPointArray :: [Point curve] -> (PointArrayPtr curve -> IO a) -> IO a
 withPointArray points go = do
   let numPoints = length points
-      sizeReference = sizeOf (undefined :: Ptr ())
+      sizeReference = sizeOf (nullPtr :: Ptr ())
   -- Allocate space for the points and a null terminator
   allocaBytes ((numPoints + 1) * sizeReference) $ \ptr ->
     -- The accumulate function ensures that each `withPoint` call is properly nested.

@@ -1023,9 +1023,9 @@ blsMSM ss ps = unsafePerformIO $ do
     -- -- If there is only one point, we refert to blsMult function
     -- -- The blst_mult_pippenger C call will also not work for
     -- -- this case on windows builds.
-    -- [(scalar, pt)] -> do
-    --   i <- scalarToInteger scalar
-    --   return (blsMult pt i)
+    [(scalar, pt)] -> do
+      i <- scalarToInteger scalar
+      return (blsMult pt i)
     _ -> do
       let (scalars, points) = unzip filteredPoints
           numPoints = length points

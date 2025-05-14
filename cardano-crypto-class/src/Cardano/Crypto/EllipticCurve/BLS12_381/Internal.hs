@@ -136,7 +136,6 @@ module Cardano.Crypto.EllipticCurve.BLS12_381.Internal (
   blsCneg,
   blsNeg,
   blsMSM,
-  blsMSM',
   blsCompress,
   blsSerialize,
   blsUncompress,
@@ -174,7 +173,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Data.ByteString.Unsafe as BSU
 
-import Control.Monad (forM, forM_)
+import Control.Monad (foldM, forM_)
 import Data.Proxy (Proxy (..))
 import Data.Void
 import Foreign (Storable (..), poke, sizeOf)
@@ -318,26 +317,6 @@ withNewAffine_ = fmap fst . withNewAffine
 
 withNewAffine' :: BLS curve => (AffinePtr curve -> IO a) -> IO (Affine curve)
 withNewAffine' = fmap snd . withNewAffine
-
-withAffineArray :: [Affine curve] -> (AffineArrayPtr curve -> IO a) -> IO a
-withAffineArray affines go = do
-  let numAffines = length affines
-      sizeReference = sizeOf (nullPtr :: Ptr ())
-  -- Allocate space for the affines and a null terminator
-  allocaBytes ((numAffines + 1) * sizeReference) $ \ptr ->
-    -- The accumulate function ensures that each `withAffine` call is properly nested.
-    -- This guarantees that the foreign pointers remain valid while we populate `ptr`.
-    -- If we instead used `zipWithM_` for example, the pointers could be finalized too early.
-    -- By nesting `withAffine` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
-    let accumulate [] = do
-          -- Add a null terminator to the end of the array
-          poke (ptr `advancePtr` numAffines) nullPtr
-          go (AffineArrayPtr (castPtr ptr))
-        accumulate ((ix, affine) : rest) =
-          withAffine affine $ \(AffinePtr aPtr) -> do
-            poke (ptr `advancePtr` ix) aPtr
-            accumulate rest
-     in accumulate (zip [0 ..] affines)
 
 withPointArray :: [Point curve] -> (PointArrayPtr curve -> IO a) -> IO a
 withPointArray points go = do
@@ -1021,79 +1000,34 @@ scalarCanonical scalar =
 -- by means of a modulo operation over the 'scalarPeriod'.
 -- Negative numbers will also be brought to the range
 -- [0, 'scalarPeriod' - 1] via modular reduction.
-blsMSM :: forall curve. BLS curve => [(Point curve, Integer)] -> Point curve
-blsMSM psAndSs = unsafePerformIO $ do
-  psAndScalars <- forM psAndSs $ \(pt, i) -> do
-    s <- scalarFromInteger i
-    return (pt, s)
+blsMSM :: forall curve. BLS curve => [Integer] -> [Point curve] -> Point curve
+blsMSM ss ps = unsafePerformIO $ do
   zeroScalar <- scalarFromInteger 0
-  -- We filter out pairs that will not contribute to the result and safety
-  let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
+  filteredPoints <-
+    foldM
+      ( \acc (s, pt) -> do
+          scalar <- scalarFromInteger s
+          -- here we filter out pairs that will not contribute to the result
+          -- This is also for safety, as the c_blst_to_affines C call
+          -- will fail if the input cointaints the point at infinity.
+          -- We also filter out the zero scalar, as on windows builds,
+          -- the blst_mult_pippenger C call will fail for this case.
+          if not (blsIsInf pt) && scalar /= zeroScalar
+            then return ((scalar, pt) : acc)
+            else return acc
+      )
+      []
+      (zip ss ps)
   case filteredPoints of
     [] -> return blsZero
-    -- If there is only one point, we refert to blsMult function
-    -- The blst_mult_pippenger C call will also not work for
-    -- this case on windows builds.
-    --
-    -- in costing this function, we might consider a cutoff
-    -- point where we switch to blsMult instead of
-    -- blst_mult_pippenger
-    [(pt, scalar)] -> do
-      i <- scalarToInteger scalar
-      return (blsMult pt i)
+    -- -- If there is only one point, we refert to blsMult function
+    -- -- The blst_mult_pippenger C call will also not work for
+    -- -- this case on windows builds.
+    -- [(scalar, pt)] -> do
+    --   i <- scalarToInteger scalar
+    --   return (blsMult pt i)
     _ -> do
-      let (points, scalars) = unzip filteredPoints
-          numPoints = length points
-          -- TODO: we can use a more efficient way to convert
-          -- points to affine coordinates, using
-          -- blst_p1s_to_affine and blst_p2s_to_affine
-          -- Note that these both will fault if the inputs
-          -- contain points at infinity (why we filter above)
-          affinePoints = fmap toAffine points
-
-      withNewPoint' @curve $ \resultPtr -> do
-        withAffineArray affinePoints $ \affineArrayPtr -> do
-          withScalarArray scalars $ \scalarArrayPtr -> do
-            let numPoints' :: CSize
-                numPoints' = fromIntegral numPoints
-                scratchSize :: Int
-                scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
-                -- Multiply by 8, because blst_mult_pippenger takes number of *bits*, but
-                -- sizeScalar is in *bytes*
-                nbits :: CSize
-                nbits = fromIntegral @Int @CSize $ sizeScalar * 8
-
-            allocaBytes scratchSize $ \scratchPtr -> do
-              c_blst_mult_pippenger
-                resultPtr
-                affineArrayPtr
-                numPoints'
-                scalarArrayPtr
-                nbits
-                (ScratchPtr scratchPtr)
-
--- | A faster version of blsMSM that does the converting of points to affine
--- via blst_p1s_to_affine and blst_p2s_to_affine instead of multiple calls to
--- blst_p1_to_affine and blst_p2_to_affine. Note that blst_p1s_to_affine
--- is unsafe for points at infinity, so we need to filter them out!
-blsMSM' :: forall curve. BLS curve => [(Point curve, Integer)] -> Point curve
-blsMSM' psAndSs = unsafePerformIO $ do
-  psAndScalars <- forM psAndSs $ \(pt, i) -> do
-    s <- scalarFromInteger i
-    return (pt, s)
-  zeroScalar <- scalarFromInteger 0
-  -- We filter out pairs that will not contribute to the result and safety
-  let filteredPoints = filter (\(pt, s) -> not (blsIsInf pt) && s /= zeroScalar) psAndScalars
-  case filteredPoints of
-    [] -> return blsZero
-    -- If there is only one point, we refert to blsMult function
-    -- The blst_mult_pippenger C call will also not work for
-    -- this case on windows builds.
-    [(pt, scalar)] -> do
-      i <- scalarToInteger scalar
-      return (blsMult pt i)
-    _ -> do
-      let (points, scalars) = unzip filteredPoints
+      let (scalars, points) = unzip filteredPoints
           numPoints = length points
 
       withNewPoint' @curve $ \resultPtr -> do

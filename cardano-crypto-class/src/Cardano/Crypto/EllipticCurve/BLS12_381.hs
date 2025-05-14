@@ -24,7 +24,6 @@ module Cardano.Crypto.EllipticCurve.BLS12_381 (
   blsCneg,
   blsNeg,
   blsMSM,
-  blsMSM',
   blsCompress,
   blsSerialize,
   blsUncompress,

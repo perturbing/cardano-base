@@ -205,7 +205,7 @@ type Point2Ptr = PointPtr Curve2
 type Point1ArrayPtr = PointArrayPtr Curve1
 type Point2ArrayPtr = PointArrayPtr Curve2
 
--- A pointer to an affine point on one of the two elliptical curves
+-- | A pointer to an affine point on one of the two elliptical curves
 newtype AffinePtr curve = AffinePtr (Ptr Void)
 
 -- A pointer to a contiguous array of affine points

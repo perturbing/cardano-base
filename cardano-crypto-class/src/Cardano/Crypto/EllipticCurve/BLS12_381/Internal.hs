@@ -193,7 +193,7 @@ data Curve2
 
 ---- Unsafe PointPtr types
 
--- A pointer to a (projective) point one of the two elliptical curves
+-- | A pointer to a (projective) point one of the two elliptical curves
 newtype PointPtr curve = PointPtr (Ptr Void)
 
 -- A pointer to a null-terminated array of pointers to points

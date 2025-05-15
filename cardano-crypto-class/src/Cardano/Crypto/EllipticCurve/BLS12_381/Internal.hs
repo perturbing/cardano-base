@@ -337,19 +337,17 @@ withPointArray points go = do
             accumulate rest
      in accumulate (zip [0 ..] points)
 
--- | Given a block of affine points and a count, produce a null-terminated
--- pointer array
+-- | Given a block of affine points and a count, produce a pointer array
 withAffineBlockArrayPtr ::
   forall curve a.
   BLS curve =>
   Ptr Void -> Int -> (AffineArrayPtr curve -> IO a) -> IO a
 withAffineBlockArrayPtr affinesBlockPtr numPoints go = do
-  allocaBytes ((numPoints + 1) * sizeOf (nullPtr :: Ptr ())) $ \affineVectorPtr -> do
+  allocaBytes (numPoints * sizeOf (nullPtr :: Ptr ())) $ \affineVectorPtr -> do
     let ptrArray = castPtr affineVectorPtr :: Ptr (Ptr ())
     forM_ [0 .. numPoints - 1] $ \i -> do
       let ptr = affinesBlockPtr `plusPtr` (i * sizeAffine (Proxy @curve))
       pokeElemOff ptrArray i ptr
-    pokeElemOff ptrArray numPoints nullPtr
     go (AffineArrayPtr affineVectorPtr)
 
 withPT :: PT -> (PTPtr -> IO a) -> IO a

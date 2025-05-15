@@ -1002,7 +1002,7 @@ scalarCanonical scalar =
 -- [0, 'scalarPeriod' - 1] via modular reduction.
 blsMSM :: forall curve. BLS curve => Int -> [Integer] -> [Point curve] -> Point curve
 blsMSM threshold ss ps = unsafePerformIO $ do
-  zeroScalar <- scalarFromInteger 0
+  -- zeroScalar <- scalarFromInteger 0
   filteredPoints <-
     foldM
       ( \acc (s, pt) -> do
@@ -1012,7 +1012,7 @@ blsMSM threshold ss ps = unsafePerformIO $ do
           -- will fail if the input contains the point at infinity.
           -- We also filter out the zero scalar, as on windows builds,
           -- the blst_mult_pippenger C call will fail for this case.
-          if blsIsInf pt || scalar == zeroScalar
+          if blsIsInf pt -- || scalar == zeroScalar
             then return acc
             else return ((scalar, pt) : acc)
       )

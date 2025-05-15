@@ -211,7 +211,7 @@ newtype AffinePtr curve = AffinePtr (Ptr Void)
 -- | A pointer to a contiguous array of affine points
 newtype AffineBlockPtr curve = AffineBlockPtr (Ptr Void)
 
--- A pointer to a null-terminated array of pointers to affine points
+-- | A pointer to a null-terminated array of pointers to affine points
 newtype AffineArrayPtr curve = AffineArrayPtr (Ptr Void)
 
 type Affine1Ptr = AffinePtr Curve1

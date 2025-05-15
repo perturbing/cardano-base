@@ -1012,9 +1012,9 @@ blsMSM threshold ss ps = unsafePerformIO $ do
           -- will fail if the input cointaints the point at infinity.
           -- We also filter out the zero scalar, as on windows builds,
           -- the blst_mult_pippenger C call will fail for this case.
-          if not (blsIsInf pt) && scalar /= zeroScalar
-            then return ((scalar, pt) : acc)
-            else return acc
+          if blsIsInf pt || scalar == zeroScalar
+            then return acc
+            else return ((scalar, pt) : acc)
       )
       []
       (zip ss ps)

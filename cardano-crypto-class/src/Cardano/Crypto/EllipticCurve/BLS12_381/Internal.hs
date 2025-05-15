@@ -318,7 +318,7 @@ withNewAffine_ = fmap fst . withNewAffine
 withNewAffine' :: BLS curve => (AffinePtr curve -> IO a) -> IO (Affine curve)
 withNewAffine' = fmap snd . withNewAffine
 
-withPointArray :: [Point curve] -> (PointArrayPtr curve -> IO a) -> IO a
+withPointArray :: [Point curve] -> (Int -> PointArrayPtr curve -> IO a) -> IO a
 withPointArray points go = do
   let numPoints = length points
       sizeReference = sizeOf (nullPtr :: Ptr ())
@@ -330,7 +330,7 @@ withPointArray points go = do
     -- By nesting `withPoint` calls in `accumulate`, we ensure they stay in scope until `go` is executed.
     let accumulate [] = do
           poke (ptr `advancePtr` numPoints) nullPtr
-          go (PointArrayPtr (castPtr ptr))
+          go numPoints (PointArrayPtr (castPtr ptr))
         accumulate ((ix, point) : rest) =
           withPoint point $ \(PointPtr pPtr) -> do
             poke (ptr `advancePtr` ix) pPtr
@@ -505,7 +505,7 @@ withNewScalar_ = fmap fst . withNewScalar
 withNewScalar' :: (ScalarPtr -> IO a) -> IO Scalar
 withNewScalar' = fmap snd . withNewScalar
 
-withScalarArray :: [Scalar] -> (ScalarArrayPtr -> IO a) -> IO a
+withScalarArray :: [Scalar] -> (Int -> ScalarArrayPtr -> IO a) -> IO a
 withScalarArray scalars go = do
   let numScalars = length scalars
       sizeReference = sizeOf (undefined :: Ptr ())
@@ -518,7 +518,7 @@ withScalarArray scalars go = do
     let accumulate [] = do
           -- Add a null terminator to the end of the array
           poke (ptr `advancePtr` numScalars) nullPtr
-          go (ScalarArrayPtr (castPtr ptr))
+          go numScalars (ScalarArrayPtr (castPtr ptr))
         accumulate ((ix, scalar) : rest) =
           withScalar scalar $ \(ScalarPtr sPtr) -> do
             poke (ptr `advancePtr` ix) sPtr
@@ -1042,11 +1042,10 @@ blsMSM threshold ss ps = unsafePerformIO $ do
           filteredPoints
     _ -> do
       let (scalars, points) = unzip filteredPoints
-          numPoints = length points
 
       withNewPoint' @curve $ \resultPtr -> do
-        withPointArray points $ \pointArrayPtr -> do
-          withScalarArray scalars $ \scalarArrayPtr -> do
+        withPointArray points $ \numPoints pointArrayPtr -> do
+          withScalarArray scalars $ \_ scalarArrayPtr -> do
             let numPoints' :: CSize
                 numPoints' = fromIntegral numPoints
                 scratchSize :: Int

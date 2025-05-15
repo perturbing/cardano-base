@@ -1020,9 +1020,9 @@ blsMSM threshold ss ps = unsafePerformIO $ do
       (zip ss ps)
   case filteredPoints of
     [] -> return blsZero
-    -- -- If there is only one point, we refert to blsMult function
-    -- -- The blst_mult_pippenger C call will also not work for
-    -- -- this case on windows builds.
+    -- If there is only one point, we refert to blsMult function
+    -- The blst_mult_pippenger C call will also not work for
+    -- this case on windows builds.
     [(scalar, pt)] -> do
       i <- scalarToInteger scalar
       return (blsMult pt i)

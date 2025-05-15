@@ -1009,7 +1009,7 @@ blsMSM threshold ss ps = unsafePerformIO $ do
           scalar <- scalarFromInteger s
           -- Here we filter out pairs that will not contribute to the result.
           -- This is also for safety, as the c_blst_to_affines C call
-          -- will fail if the input cointaints the point at infinity.
+          -- will fail if the input contains the point at infinity.
           -- We also filter out the zero scalar, as on windows builds,
           -- the blst_mult_pippenger C call will fail for this case.
           if blsIsInf pt || scalar == zeroScalar

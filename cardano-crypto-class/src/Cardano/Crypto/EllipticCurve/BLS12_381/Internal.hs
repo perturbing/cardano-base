@@ -196,7 +196,7 @@ data Curve2
 -- | A pointer to a (projective) point one of the two elliptical curves
 newtype PointPtr curve = PointPtr (Ptr Void)
 
--- A pointer to a null-terminated array of pointers to points
+-- | A pointer to a null-terminated array of pointers to points
 newtype PointArrayPtr curve = PointArrayPtr (Ptr Void)
 
 type Point1Ptr = PointPtr Curve1

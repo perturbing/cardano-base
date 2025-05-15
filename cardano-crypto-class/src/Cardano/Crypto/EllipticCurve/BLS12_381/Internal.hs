@@ -1007,7 +1007,7 @@ blsMSM threshold ss ps = unsafePerformIO $ do
     foldM
       ( \acc (s, pt) -> do
           scalar <- scalarFromInteger s
-          -- here we filter out pairs that will not contribute to the result
+          -- Here we filter out pairs that will not contribute to the result.
           -- This is also for safety, as the c_blst_to_affines C call
           -- will fail if the input cointaints the point at infinity.
           -- We also filter out the zero scalar, as on windows builds,

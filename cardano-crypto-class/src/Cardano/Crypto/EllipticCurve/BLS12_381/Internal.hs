@@ -1066,6 +1066,9 @@ blsMSM threshold ssAndps = unsafePerformIO $ do
                     scalarArrayPtr
                     nbits
                     (ScratchPtr scratchPtr)
+                  -- Test: prevent GC
+                  mapM_ (\(Scalar fp, _) -> touchForeignPtr fp) filteredPoints
+                  mapM_ (\(_, Point fp) -> touchForeignPtr fp) filteredPoints
 
 ---- PT operations
 

@@ -998,7 +998,6 @@ scalarCanonical scalar =
 -- by means of a modulo operation over the 'scalarPeriod'.
 -- Negative numbers will also be brought to the range
 -- [0, 'scalarPeriod' - 1] via modular reduction.
-{-# NOINLINE blsMSM #-}
 blsMSM :: forall curve. BLS curve => Int -> [(Integer, Point curve)] -> Point curve
 blsMSM threshold ssAndps = unsafePerformIO $ do
   zeroScalar <- scalarFromInteger 0
@@ -1059,7 +1058,7 @@ blsMSM threshold ssAndps = unsafePerformIO $ do
             allocaBytes (numPoints * sizeAffine (Proxy @curve)) $ \affinesBlockPtr -> do
               c_blst_to_affines (AffineBlockPtr affinesBlockPtr) pointArrayPtr numPoints'
               withAffineBlockArrayPtr affinesBlockPtr numPoints $ \affineArrayPtr -> do
-                allocaBytes scratchSize $ \scratchPtr -> do
+                allocaBytes (scratchSize * 32) $ \scratchPtr -> do
                   c_blst_mult_pippenger
                     resultPtr
                     affineArrayPtr
@@ -1067,9 +1066,6 @@ blsMSM threshold ssAndps = unsafePerformIO $ do
                     scalarArrayPtr
                     nbits
                     (ScratchPtr scratchPtr)
-                  -- Test: prevent GC
-                  mapM_ (\(Scalar fp, _) -> touchForeignPtr fp) filteredPoints
-                  mapM_ (\(_, Point fp) -> touchForeignPtr fp) filteredPoints
 
 
 ---- PT operations

@@ -1058,7 +1058,7 @@ blsMSM threshold ssAndps = unsafePerformIO $ do
             allocaBytes (numPoints * sizeAffine (Proxy @curve)) $ \affinesBlockPtr -> do
               c_blst_to_affines (AffineBlockPtr affinesBlockPtr) pointArrayPtr numPoints'
               withAffineBlockArrayPtr affinesBlockPtr numPoints $ \affineArrayPtr -> do
-                allocaBytes (scratchSize * 2) $ \scratchPtr -> do
+                allocaBytes (scratchSize + 64) $ \scratchPtr -> do
                   c_blst_mult_pippenger
                     resultPtr
                     affineArrayPtr

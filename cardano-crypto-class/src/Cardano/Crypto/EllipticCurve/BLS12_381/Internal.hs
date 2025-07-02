@@ -1053,18 +1053,18 @@ blsMSM threshold ssAndps = unsafePerformIO $ do
                 scratchSize = fromIntegral @CSize @Int $ c_blst_scratch_sizeof (Proxy @curve) numPoints'
                 -- Multiply by 8, because blst_mult_pippenger takes number of *bits*, but
                 -- sizeScalar is in *bytes*
-                nbits :: CSize
-                nbits = fromIntegral @Int @CSize $ sizeScalar * 8
+                -- nbits :: CSize
+                -- nbits = fromIntegral @Int @CSize $ sizeScalar * 8
             allocaBytes (numPoints * sizeAffine (Proxy @curve)) $ \affinesBlockPtr -> do
               c_blst_to_affines (AffineBlockPtr affinesBlockPtr) pointArrayPtr numPoints'
               withAffineBlockArrayPtr affinesBlockPtr numPoints $ \affineArrayPtr -> do
-                allocaBytes (scratchSize + 1) $ \scratchPtr -> do
+                allocaBytes scratchSize $ \scratchPtr -> do
                   c_blst_mult_pippenger
                     resultPtr
                     affineArrayPtr
                     numPoints'
                     scalarArrayPtr
-                    nbits
+                    (fromIntegral @Int @CSize 255)
                     (ScratchPtr scratchPtr)
 
 
